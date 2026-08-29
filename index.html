@@ -90,7 +90,7 @@
     const CONFIG = {
       globe: {
         radius:   100,
-        dotCount: 300000,       // 도트 수
+        dotCount: 180000,       // 도트 수
         landDotSize:  5.0,     // 육지 도트 크기
         oceanDotSize: 3.0,     // 바다 도트 크기
         landDotColor:  '#99b0d0',  // 육지 도트 색상
@@ -330,7 +330,7 @@
     function initScene() {
       scene  = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 1, 2000);
-      camera.position.set(0, 0, 340);
+      camera.position.set(0, 0, 215); // 지구본을 확대하기 위해 카메라 거리를 가깝게 조정 (340 -> 240)
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setClearColor(0x000000, 0);
@@ -358,7 +358,9 @@
     // ============================================================
     function buildDotGlobe() {
       const R   = CONFIG.globe.radius;
-      const N   = CONFIG.globe.dotCount;
+      // 스마트폰 환경(화면 너비 690px 미만)일 경우 도트 수를 절반으로 조정하여 성능 최적화
+      const isMobilePhone = window.innerWidth < 690;
+      const N   = isMobilePhone ? Math.floor(CONFIG.globe.dotCount / 2) : CONFIG.globe.dotCount;
       const PHI = (1 + Math.sqrt(5)) / 2;
 
       const landPos = [], landCol = [];
@@ -386,18 +388,22 @@
         }
       }
 
+      // 스마트폰 환경에서 도트 크기 2/3 축소 적용
+      const landSize  = isMobilePhone ? CONFIG.globe.landDotSize * (2 / 3) : CONFIG.globe.landDotSize;
+      const oceanSize = isMobilePhone ? CONFIG.globe.oceanDotSize * (2 / 3) : CONFIG.globe.oceanDotSize;
+
       // 육지 도트
       const lg = new THREE.BufferGeometry();
       lg.setAttribute('position', new THREE.Float32BufferAttribute(landPos, 3));
       lg.setAttribute('color',    new THREE.Float32BufferAttribute(landCol, 3));
-      landMesh = new THREE.Points(lg, makeDotMaterial(CONFIG.globe.landDotSize, CONFIG.globe.landDotOpacity));
+      landMesh = new THREE.Points(lg, makeDotMaterial(landSize, CONFIG.globe.landDotOpacity));
       globeGroup.add(landMesh);
 
       // 바다 도트
       const sg = new THREE.BufferGeometry();
       sg.setAttribute('position', new THREE.Float32BufferAttribute(seaPos, 3));
       sg.setAttribute('color',    new THREE.Float32BufferAttribute(seaCol, 3));
-      oceanMesh = new THREE.Points(sg, makeDotMaterial(CONFIG.globe.oceanDotSize, CONFIG.globe.oceanDotOpacity));
+      oceanMesh = new THREE.Points(sg, makeDotMaterial(oceanSize, CONFIG.globe.oceanDotOpacity));
       globeGroup.add(oceanMesh);
     }
 
@@ -819,6 +825,7 @@
     }
 
     // 2D CSS 글로우 위치/크기 계산 (3D 지구본 직경 및 카메라 프로젝션과 100% 동일 동기화)
+    // ※ project(camera)는 setViewOffset이 반영된 투영행렬을 사용하므로 별도 오프셋 보정 불필요
     function updateGlowPosition() {
       const glowEl = document.getElementById('globe-glow');
       if (!glowEl || !camera || !globeGroup) return;
@@ -827,20 +834,19 @@
       const centerWorld = new THREE.Vector3();
       globeGroup.getWorldPosition(centerWorld);
 
-      // 중심점 2D 프로젝션 좌표
+      // 중심점 2D 프로젝션 좌표 (setViewOffset 반영된 투영행렬 사용 → 화면상 정확한 위치)
       const projCenter = centerWorld.clone().project(camera);
       const cx = (projCenter.x * 0.5 + 0.5) * window.innerWidth;
       const cy = (-projCenter.y * 0.5 + 0.5) * window.innerHeight;
 
-      // 외곽 edge 2D 프로젝션 좌표로 정확한 2D 픽셀 반지름 계산
+      // 외곽 edge 2D 프로젝션으로 정확한 픽셀 반지름 계산
       const edgeWorld = centerWorld.clone().add(new THREE.Vector3(R, 0, 0));
       const projEdge  = edgeWorld.project(camera);
       const ex = (projEdge.x * 0.5 + 0.5) * window.innerWidth;
       const ey = (-projEdge.y * 0.5 + 0.5) * window.innerHeight;
 
       const rPx = Math.hypot(ex - cx, ey - cy);
-      // scaleFactor: 글로브보다 약간 크게 만듦 (1.05 = 5% 크게)
-      const scaleFactor = 1.05;
+      const scaleFactor = 1.13; // 글로우가 지구본보다 약간 더 크게 보이도록 1.13배 확대
       const diameter = rPx * 2 * scaleFactor;
 
       glowEl.style.width  = `${diameter}px`;
@@ -849,7 +855,7 @@
       glowEl.style.top    = `${cy}px`;
     }
 
-    // 창 크기에 비례해 지구본이 상단 2/3 영역에 오도록 시각적 뷰포트 오프셋 적용
+    // 창 크기에 비례해 지구본 상단이 여백 없이 뷰포트 상단에 맞물리도록 시각적 뷰포트 오프셋 적용
     function updateGlobePosition() {
       const w = window.innerWidth;
       const h = window.innerHeight;
