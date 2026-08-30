@@ -695,7 +695,7 @@
       const sp = wp.clone().project(camera);
       clickLabel.style.left = `${(sp.x * 0.5 + 0.5) * innerWidth}px`;
       
-      const yOffset = window.innerWidth < 690 ? -10 : -50;
+      const yOffset = window.innerWidth < 690 ? -15 : -25;
       clickLabel.style.top  = `${(-sp.y * 0.5 + 0.5) * innerHeight + yOffset}px`;
     }
 
