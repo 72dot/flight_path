@@ -418,6 +418,9 @@
         colorWrite: false,     // 화면에 색상을 그리지 않아 배경이 그대로 투과됨
         depthWrite: true,      // 깊이(Z-Depth) 정보만 버퍼에 강력하게 기록
         side: THREE.BackSide,  // 구체의 안쪽 면(즉, 가장 멀리 있는 뒷면 껍질)만 활성화
+        polygonOffset: true,
+        polygonOffsetFactor: 1.0,
+        polygonOffsetUnits: 1.0,
       });
       const occluderMesh = new THREE.Mesh(occluderGeo, occluderMat);
       occluderMesh.renderOrder = 0; // Opaque pass에서 가장 먼저 렌더링하여 마스킹 역할을 함
