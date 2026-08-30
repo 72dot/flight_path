@@ -182,6 +182,7 @@
 
       varying vec3  vColor;
       varying float vAlpha;
+      varying float vDp;         // 광학 모아레 방지용(가장자리 아웃포커싱)
 
       void main() {
         vColor = color;
@@ -189,6 +190,8 @@
         // 점의 단위 법선 (구면이므로 position 방향 = 법선)
         vec3  n  = normalize(position);
         float dp = dot(n, camDir);
+        vDp = dp;
+
         // fadeEnd ~ fadeStart 구간에서 0 → 1 선형 보간
         float f  = clamp((dp - fadeEnd) / (fadeStart - fadeEnd), 0.0, 1.0);
         vAlpha   = minAlpha + f * (baseAlpha - minAlpha);
@@ -203,12 +206,18 @@
     const FRAG_SHADER = `
       varying float vAlpha;
       varying vec3  vColor;
+      varying float vDp;
 
       void main() {
         // 완벽한 원형 마스킹 (텍스처 불필요)
         float dist = length(gl_PointCoord - vec2(0.5));
         if (dist > 0.5) discard;
-        float aa = smoothstep(0.5, 0.38, dist);
+
+        // 정면(dp 0.4 이상)은 선명한 원(0.38), 측면/뒷면(dp -0.2 이하)은 완전 흐릿한 빛방울(0.0)로 보간
+        // 이를 통해 겹치는 패턴의 고주파 간섭을 뭉개어 광학적 모아레 현상을 제거
+        float softness = mix(0.0, 0.38, smoothstep(-0.2, 0.4, vDp));
+        float aa = smoothstep(0.5, softness, dist);
+        
         gl_FragColor = vec4(vColor, aa * vAlpha);
       }
     `;
