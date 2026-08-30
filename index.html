@@ -410,22 +410,64 @@
     // ============================================================
     // 도시 핀 (파동 원형) 생성
     // ============================================================
+
+    // Canvas 방사형 그라데이션 텍스처 생성 (1회만 호출, GPU에 캐시)
+    // 중심→가장자리: 투명 → 불투명(링 밴드) → 투명 으로 매핑하여 시각적 도넛 형태 구현
+    function createRippleTexture(colorHex, size) {
+      const sz = size || 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = sz; canvas.height = sz;
+      const ctx = canvas.getContext('2d');
+      const cx = sz / 2, cy = sz / 2, r = sz / 2;
+
+      // 방사형 그라데이션 (중심 → 가장자리)
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      //  0%~55% : 완전 투명 (가운데 빈 공간)
+      // 55%~75% : 부드럽게 불투명 전환 (안쪽 경계 페이드인)
+      // 75%~88% : 최대 불투명 (링의 밝은 밴드)
+      // 88%~100%: 서서히 투명 (바깥쪽 경계 페이드아웃)
+      const c = new THREE.Color(colorHex);
+      const r8 = Math.round(c.r * 255), g8 = Math.round(c.g * 255), b8 = Math.round(c.b * 255);
+      grad.addColorStop(0,    `rgba(${r8},${g8},${b8}, 0)`);
+      grad.addColorStop(0.55, `rgba(${r8},${g8},${b8}, 0)`);
+      grad.addColorStop(0.72, `rgba(${r8},${g8},${b8}, 0.6)`);
+      grad.addColorStop(0.82, `rgba(${r8},${g8},${b8}, 1.0)`);
+      grad.addColorStop(0.92, `rgba(${r8},${g8},${b8}, 0.5)`);
+      grad.addColorStop(1.0,  `rgba(${r8},${g8},${b8}, 0)`);
+
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, sz, sz);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    // 텍스처 캐시 (색상별 1장만 생성)
+    let rippleTexDefault = null;
+    let rippleTexSingapore = null;
+
     function createPins() {
       const R = CONFIG.globe.radius;
+
+      // 텍스처 1회 생성 (GPU 캐시)
+      if (!rippleTexDefault)   rippleTexDefault   = createRippleTexture(CONFIG.ripple.color, 256);
+      if (!rippleTexSingapore) rippleTexSingapore = createRippleTexture('#005cfe', 256);
+
       LOCATIONS.forEach(loc => {
         const isSingapore = loc.country.toLowerCase() === 'singapore';
-        const scaleFactor = isSingapore ? 1.0 : 0.6; // 싱가포르는 100%, 나머지는 60%
+        const scaleFactor = isSingapore ? 1.0 : 0.6;
 
         const worldPos = latLonToVec3(loc.lat, loc.long, R + 1.0);
-        const posNorm  = worldPos.clone().normalize(); // 글로브 로컬 단위 법선
+        const posNorm  = worldPos.clone().normalize();
 
         const grp = new THREE.Group();
         grp.position.copy(worldPos);
         grp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), posNorm);
 
-        // 색상 설정 (싱가포르: 주황색 오렌지 계열, 나머지: 기존 하늘색 계열)
-        const coreColorHex   = isSingapore ? '#469dff' : CONFIG.ripple.coreColor;
-        const ringColorHex   = isSingapore ? '#005cfe' : CONFIG.ripple.color;
+        // 색상 설정 (싱가포르: 파란 계열, 나머지: 기존 하늘색 계열)
+        const coreColorHex = isSingapore ? '#469dff' : CONFIG.ripple.coreColor;
+        const rippleTex    = isSingapore ? rippleTexSingapore : rippleTexDefault;
 
         // 중심 코어
         const coreMat = new THREE.MeshBasicMaterial({
@@ -436,7 +478,7 @@
           depthTest: false,
         });
         const core = new THREE.Mesh(new THREE.CircleGeometry(1.4 * scaleFactor, 32), coreMat);
-        core.renderOrder = 11; // 파동 링(renderOrder 10)보다 항상 위에 깔끔하게 위치
+        core.renderOrder = 11;
         grp.add(core);
 
         // ripple 최대 범위와 동일한 크기의 클릭 영역
@@ -447,27 +489,26 @@
         grp.add(hitMesh);
         pinObjects.push(hitMesh);
 
-        // 파동 링 2개 (구체 표면 Z-fighting 및 폴리곤 찢어짐 근본 차단)
+        // 파동 원형판 2개 (Canvas 방사형 그라데이션 텍스처 적용)
         const rings = [];
         for (let i = 0; i < 2; i++) {
-          const ringMat = new THREE.MeshBasicMaterial({
-            color: new THREE.Color(ringColorHex),
+          const discMat = new THREE.MeshBasicMaterial({
+            map: rippleTex,
             transparent: true,
             opacity: CONFIG.ripple.opacity,
             side: THREE.DoubleSide,
-            depthTest: false, // 지구본 표면 도트/메쉬와 겹쳐서 깨지는(Z-fighting) 현상 방지
+            depthTest: false,
           });
-          // 내반경(innerRadius)을 0으로 만들어 중앙 코어 원과 링 사이의 빈 틈새(도넛 구멍 단차)를 완전히 제거
-          const ring = new THREE.Mesh(new THREE.RingGeometry(0, CONFIG.ripple.ringSize * scaleFactor, 64), ringMat);
-          ring.userData = { phase: i * 0.5 };
-          ring.renderOrder = 10; // 항상 지구본 도트 위에 깔끔하게 렌더링
-          grp.add(ring);
-          rings.push(ring);
+          const discRadius = CONFIG.ripple.ringSize * scaleFactor;
+          const disc = new THREE.Mesh(new THREE.CircleGeometry(discRadius, 64), discMat);
+          disc.userData = { phase: i * 0.5 };
+          disc.renderOrder = 10;
+          grp.add(disc);
+          rings.push(disc);
         }
 
         globeGroup.add(grp);
 
-        // 페이드 제어용 데이터 저장
         pinData.push({ posNorm, coreMat, rings, fade: 1.0 });
       });
     }
@@ -651,20 +692,22 @@
       // ★ 페이드 갱신 — 매 프레임 (camDir uniform만 바꾸면 GPU가 처리하므로 비용 저렴)
       updateFade();
 
-      // 파동 링 애니메이션 (부드럽게 퍼지며 서서히 사라지고 끊김 없이 재생)
+      // 파동 원형판 애니메이션 (그라데이션 텍스처 기반: 작게 시작 → 확대, 투명→불투명→투명)
       pinData.forEach(pd => {
         const f = pd.fade;
-        pd.rings.forEach(ring => {
-          ring.userData.phase += CONFIG.ripple.speed;
-          if (ring.userData.phase > 1) ring.userData.phase -= 1;
-          const p = ring.userData.phase;
-          const s = 1 + p * (CONFIG.ripple.maxScale - 1);
-          ring.scale.set(s, s, 1);
+        pd.rings.forEach(disc => {
+          disc.userData.phase += CONFIG.ripple.speed;
+          if (disc.userData.phase > 1) disc.userData.phase -= 1;
+          const p = disc.userData.phase;
 
-          // 파동이 바깥으로 퍼질수록 부드럽게 완전 투명(0)으로 서서히 페이드아웃 (Ease-out 곡선)
-          const ringAlpha = Math.pow(1 - p, 1.5);
-          ring.material.opacity = ringAlpha * CONFIG.ripple.opacity * f;
-          ring.material.visible = f > 0.005 && ringAlpha > 0.005;
+          // 0.3x에서 시작 → maxScale까지 부드럽게 확대
+          const s = 0.3 + p * (CONFIG.ripple.maxScale - 0.3);
+          disc.scale.set(s, s, 1);
+
+          // 투명도: 0% → 100% → 0% (벨 커브, sin 곡선 기반)
+          const discAlpha = Math.sin(p * Math.PI);
+          disc.material.opacity = discAlpha * CONFIG.ripple.opacity * f;
+          disc.material.visible = f > 0.005 && discAlpha > 0.005;
         });
       });
 

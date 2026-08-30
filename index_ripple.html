@@ -433,8 +433,10 @@
           side: THREE.DoubleSide,
           transparent: true,
           opacity: 1.0,
+          depthTest: false,
         });
         const core = new THREE.Mesh(new THREE.CircleGeometry(1.4 * scaleFactor, 32), coreMat);
+        core.renderOrder = 11; // 파동 링(renderOrder 10)보다 항상 위에 깔끔하게 위치
         grp.add(core);
 
         // ripple 최대 범위와 동일한 크기의 클릭 영역
@@ -455,7 +457,8 @@
             side: THREE.DoubleSide,
             depthTest: false, // 지구본 표면 도트/메쉬와 겹쳐서 깨지는(Z-fighting) 현상 방지
           });
-          const ring = new THREE.Mesh(new THREE.RingGeometry(0.9 * scaleFactor, CONFIG.ripple.ringSize * scaleFactor, 64), ringMat);
+          // 내반경(innerRadius)을 0으로 만들어 중앙 코어 원과 링 사이의 빈 틈새(도넛 구멍 단차)를 완전히 제거
+          const ring = new THREE.Mesh(new THREE.RingGeometry(0, CONFIG.ripple.ringSize * scaleFactor, 64), ringMat);
           ring.userData = { phase: i * 0.5 };
           ring.renderOrder = 10; // 항상 지구본 도트 위에 깔끔하게 렌더링
           grp.add(ring);
