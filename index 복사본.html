@@ -21,6 +21,7 @@
       position: absolute; top: 0; left: 0;
       z-index: 1; background: transparent;
     }
+    #webgl-container:active { cursor: grabbing; }
     /* 2D 글로우 레이어 스타일 */
     #globe-glow {
       position: absolute;
@@ -694,9 +695,7 @@
 
       const sp = wp.clone().project(camera);
       clickLabel.style.left = `${(sp.x * 0.5 + 0.5) * innerWidth}px`;
-      
-      const yOffset = window.innerWidth < 690 ? -10 : -50;
-      clickLabel.style.top  = `${(-sp.y * 0.5 + 0.5) * innerHeight + yOffset}px`;
+      clickLabel.style.top  = `${(-sp.y * 0.5 + 0.5) * innerHeight - 50}px`;
     }
 
     // ============================================================
@@ -746,66 +745,37 @@
     // ============================================================
     // 이벤트: 데스크톱 (마우스)
     // ============================================================
-    let pointerStartX = 0;
-    let pointerStartY = 0;
-
     function onPointerDown(e) {
       // 터치 이벤트는 별도 핸들러에서 처리하므로 무시
       if (e.pointerType === 'touch') return;
 
-      pointerStartX = e.clientX;
-      pointerStartY = e.clientY;
+      mouse.x =  (e.clientX/innerWidth)  * 2 - 1;
+      mouse.y = -(e.clientY/innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
 
-      // 마우스를 꾹 누를 때(Down)만 grabbing(움켜쥔 손) 커서로 변경
-      container.style.cursor = 'grabbing';
-      if (renderer && renderer.domElement) {
-        renderer.domElement.style.cursor = 'grabbing';
-      }
-    }
-
-    function onPointerUp(e) {
-      if (e.pointerType === 'touch') return;
-      
-      // 마우스를 떼면 다시 hover 상태(화살표 or 손가락)로 복구
-      onPointerMove(e);
-
-      // 드래그(회전)와 클릭 분리: 마우스를 누른 채로 5px 미만 이동했을 때만 '클릭'으로 판별
-      const dx = e.clientX - pointerStartX;
-      const dy = e.clientY - pointerStartY;
-      if (Math.hypot(dx, dy) < 5) {
-        mouse.x =  (e.clientX/innerWidth)  * 2 - 1;
-        mouse.y = -(e.clientY/innerHeight) * 2 + 1;
-        raycaster.setFromCamera(mouse, camera);
-
-        const hits = raycaster.intersectObjects(pinObjects);
-        if (hits.length > 0) {
-          const obj  = hits[0].object;
-          const data = obj.userData;
-          selectedObject = obj;
-          clickLabel.textContent = data.city ? `${data.country} — ${data.city}` : data.country;
-          clickLabel.style.visibility = 'visible';
-          updateLabelPos();
-          gsap.fromTo(clickLabel,
-            { opacity: 0, marginTop: 8 },
-            { opacity: 1, marginTop: 0, duration: 0.22, ease: 'power2.out' }
-          );
-        }
+      const hits = raycaster.intersectObjects(pinObjects);
+      if (hits.length > 0) {
+        const obj  = hits[0].object;
+        const data = obj.userData;
+        selectedObject = obj;
+        clickLabel.textContent = data.city ? `${data.country} — ${data.city}` : data.country;
+        clickLabel.style.visibility = 'visible';
+        updateLabelPos();
+        gsap.fromTo(clickLabel,
+          { opacity: 0, y: 8 },
+          { opacity: 1, y: 0, duration: 0.22, ease: 'power2.out' }
+        );
       }
     }
 
     function onPointerMove(e) {
       if (e.pointerType === 'touch') return;
 
-      // 마우스를 꾹 누른 상태(드래그 중)라면 grabbing 상태 유지
-      if (e.buttons > 0) return;
-
       mouse.x =  (e.clientX/innerWidth)  * 2 - 1;
       mouse.y = -(e.clientY/innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
-      
-      // 핀 위에 마우스를 올렸을 때는 pointer, 그 외에는 무조건 화살표(default)
       const isHoveringPin = raycaster.intersectObjects(pinObjects).length > 0;
-      const targetCursor  = isHoveringPin ? 'pointer' : 'default';
+      const targetCursor  = isHoveringPin ? 'default' : 'grab';
 
       container.style.cursor = targetCursor;
       if (renderer && renderer.domElement) {
@@ -866,7 +836,6 @@
       touch.startX  = t.clientX;
       touch.startY  = t.clientY;
       touch.lastX   = t.clientX;
-      touch.lastY   = t.clientY;
       touch.velocity = 0;
       touch.dir      = null;
 
@@ -903,23 +872,11 @@
 
       if (touch.dir === 'h' && touch.onGlobe) {
         // 지구 위에서 수평 드래그 → 회전
-        e.preventDefault(); // 이 경우 스크롤 차단
+        e.preventDefault(); // 이 경우만 스크롤 차단
         const delta = t.clientX - touch.lastX;
         touch.velocity = delta * TOUCH_ROTATE_SPEED;
         globeGroup.rotation.y += touch.velocity;
         touch.lastX = t.clientX;
-      } else if (touch.dir === 'v') {
-        // 모바일 스와이프 충돌 방지: 상하 스와이프 시 네이티브 스크롤을 막고 가짜 휠 이벤트를 부모로 전송
-        e.preventDefault();
-        const deltaY = touch.lastY - t.clientY;
-        if (window.parent !== window && Math.abs(deltaY) > 0) {
-          window.parent.postMessage({
-            type: 'iframe-wheel',
-            deltaY: deltaY * 2.5, // 터치 스크롤 속도 보정
-            deltaX: 0,
-          }, '*');
-        }
-        touch.lastY = t.clientY;
       }
       // 그 외(수직 or 지구 밖 수평) → preventDefault 미호출 → 브라우저 기본 스크롤
     }
@@ -1010,7 +967,6 @@
       window.addEventListener('resize',      onResize);
       window.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerdown', onPointerDown);
-      window.addEventListener('pointerup',   onPointerUp);
 
       // 모바일 터치: capture:true 로 OrbitControls의 bubble 핸들러보다 먼저 실행
       // touchmove 만 passive:false (지구 위 수평 드래그 시 preventDefault 필요)
