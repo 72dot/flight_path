@@ -958,6 +958,20 @@
       animate(0);
     }
 
+    // ============================================================
+    // iframe → 부모 페이지 wheel 이벤트 중계
+    // iframe 위에 마우스가 있을 때 부모 Lenis Smooth Scroll이 끊기는 문제 해결
+    // ============================================================
+    if (window.parent !== window) {
+      window.addEventListener('wheel', (e) => {
+        window.parent.postMessage({
+          type: 'iframe-wheel',
+          deltaY: e.deltaY,
+          deltaX: e.deltaX,
+        }, '*');
+      }, { passive: true, capture: true }); // capture: true 로 OrbitControls보다 먼저 캡처
+    }
+
     window.addEventListener('DOMContentLoaded', startApp);
   </script>
 </body>
