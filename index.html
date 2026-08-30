@@ -908,18 +908,6 @@
         touch.velocity = delta * TOUCH_ROTATE_SPEED;
         globeGroup.rotation.y += touch.velocity;
         touch.lastX = t.clientX;
-      } else if (touch.dir === 'v') {
-        // 모바일 스와이프 충돌 방지: 상하 스와이프 시 네이티브 스크롤을 막고 가짜 휠 이벤트를 부모로 전송
-        e.preventDefault();
-        const deltaY = touch.lastY - t.clientY;
-        if (window.parent !== window && Math.abs(deltaY) > 0) {
-          window.parent.postMessage({
-            type: 'iframe-wheel',
-            deltaY: deltaY * 2.5, // 터치 스크롤 속도 보정
-            deltaX: 0,
-          }, '*');
-        }
-        touch.lastY = t.clientY;
       }
       // 그 외(수직 or 지구 밖 수평) → preventDefault 미호출 → 브라우저 기본 스크롤
     }
