@@ -57,7 +57,7 @@
       -webkit-backdrop-filter: blur(6px);
       border: 1px solid rgba(56, 189, 248, 0.55);
       border-radius: 22px;
-      font-size: 1rem; font-weight: 500; color: #2A73BB;
+      font-size: 1rem; font-weight: 500; color: #000;
       pointer-events: none; opacity: 0;
       transform: translate(-50%, -100%);
       white-space: nowrap;
@@ -115,11 +115,11 @@
         // 'full'       : 모든 위치를 서로 완전 연결 (복잡한 거미줄)
         // 'hub'        : 첫 번째 위치(허브)에서 나머지 전체를 연결
         // 'knn'        : 각 위치에서 가장 가까운 K개 이웃만 연결
-        connectMode: 'sequential',
-        knnK: 3,              // 'knn' 모드에서 이웃 수 (기본값 3)
+        connectMode: 'knn',
+        knnK: 5,              // 'knn' 모드에서 이웃 수 (기본값 3)
         hubIndex: 0,          // 'hub' 모드에서 허브로 쓸 LOCATIONS 인덱스
       },
-      autoRotateSpeed: 0.25,
+      autoRotateSpeed: 0.5,
     };
 
     // ============================================================
@@ -403,8 +403,8 @@
       sg.setAttribute('position', new THREE.Float32BufferAttribute(seaPos, 3));
       sg.setAttribute('color',    new THREE.Float32BufferAttribute(seaCol, 3));
       oceanMesh = new THREE.Points(sg, makeDotMaterial(oceanSize, CONFIG.globe.oceanDotOpacity));
-      oceanMesh.renderOrder = 0; // 점들은 가장 먼저(0) 그려지므로, 나중에 그려질 차폐구체와 심도 충돌이 발생하지 않음
-      landMesh.renderOrder = 0;
+      oceanMesh.renderOrder = 2; // 차폐 구체보다 위에 그려지도록 보장
+      landMesh.renderOrder = 2;
       globeGroup.add(oceanMesh);
 
       // ============================================================
@@ -420,7 +420,7 @@
         side: THREE.BackSide,  // 구체의 안쪽 면(즉, 가장 멀리 있는 뒷면 껍질)만 활성화
       });
       const occluderMesh = new THREE.Mesh(occluderGeo, occluderMat);
-      occluderMesh.renderOrder = 1; // 점들이(0) 그려진 후 심도 마스킹 적용
+      occluderMesh.renderOrder = 0; // Opaque pass에서 가장 먼저 렌더링하여 마스킹 역할을 함
       globeGroup.add(occluderMesh);
     }
 
@@ -609,9 +609,7 @@
         transparent: true,
         opacity: CONFIG.arc.lineOpacity,
       });
-      const arcMesh = new THREE.Mesh(tubeGeo, lineMat);
-      arcMesh.renderOrder = 2; // 차폐구체(1) 이후에 그려져 뒷면은 가려지고 앞면은 정상 출력
-      globeGroup.add(arcMesh);
+      globeGroup.add(new THREE.Mesh(tubeGeo, lineMat));
 
       const pulseMat = new THREE.MeshBasicMaterial({
         color: new THREE.Color(CONFIG.arc.pulseColor),
@@ -622,7 +620,6 @@
         new THREE.SphereGeometry(CONFIG.arc.pulseSize, 12, 12),
         pulseMat
       );
-      pulse.renderOrder = 2;
       pulse.userData = { curve, progress: Math.random(), speed: CONFIG.arc.pulseSpeed + Math.random()*0.003 };
       globeGroup.add(pulse);
 
